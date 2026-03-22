@@ -1,123 +1,132 @@
+
 # go-worker
 
-A PostgreSQL-backed job queue worker written in Go. Jobs are claimed atomically using `SELECT FOR UPDATE SKIP LOCKED`, ensuring safe concurrent processing with zero duplicate execution.
+A PostgreSQL-backed concurrent job queue system written in Go.
 
-> 🚧 **Active development** — JSON payload parsing, job execution engine, multiple concurrent workers, and a REST API layer are all coming soon.
+Jobs are processed asynchronously by multiple workers using `SELECT FOR UPDATE SKIP LOCKED`, ensuring safe concurrent execution with zero duplication.
 
 ---
 
-## Architecture
+## 🚀 Features
 
+- Concurrent workers (goroutines)
+- PostgreSQL-backed durable queue
+- Atomic job locking (`FOR UPDATE SKIP LOCKED`)
+- JSON-based job payloads
+- Execution engine (print, sleep, extendable)
+- REST API to enqueue jobs
+- Clean, modular structure
+
+---
+
+## 🧠 Architecture
+
+Client → HTTP API → PostgreSQL → Worker Pool → Execution
+
+---
+
+## ⚙️ How It Works
+
+1. API receives a job request
+2. Job is inserted into PostgreSQL (`pending`)
+3. Workers poll database
+4. Each worker:
+   - Locks a job
+   - Marks it as `processing`
+   - Executes logic
+   - Marks it as `done` or `failed`
+
+---
+
+## 🧩 Example Job
+
+```json
+{
+  "task": "sleep",
+  "seconds": 3
+}
 ```
-┌─────────────────────────────────────────────────┐
-│                  go-worker                       │
-│                                                  │
-│   ┌──────────┐     ┌──────────┐                  │
-│   │ Worker 1 │     │ Worker N │  ← coming soon   │
-│   └────┬─────┘     └────┬─────┘                  │
-│        │                │                        │
-│        └──────┬─────────┘                        │
-│               ▼                                  │
-│      ┌────────────────┐                          │
-│      │  pgx/v5 Pool   │                          │
-│      └───────┬────────┘                          │
-│              │                                   │
-└──────────────┼───────────────────────────────────┘
-               ▼
-     ┌──────────────────┐
-     │   PostgreSQL      │
-     │   jobs table      │
-     └──────────────────┘
+
+---
+
+## 🌐 API
+
+### POST /job
+
+Create a job:
+
+```json
+{
+  "task": "print",
+  "value": "kobra"
+}
 ```
 
-## How It Works
+---
 
-The worker runs a continuous polling loop:
+### GET /jobs
 
-1. Opens a transaction
-2. Selects the oldest `pending` job using `FOR UPDATE SKIP LOCKED` — this prevents two workers from grabbing the same job
-3. Marks it as `processing`
-4. Commits and executes
+Returns pending and failed jobs.
 
-If no jobs are available, the worker sleeps for 2 seconds before retrying.
+---
 
-## Database Schema
+## 🧵 Concurrency
+
+Workers run as goroutines:
+
+- Parallel execution
+- No duplicate jobs
+- Safe locking via PostgreSQL
+
+---
+
+## 🗄 Database Schema
 
 ```sql
 CREATE TABLE jobs (
-    id         SERIAL PRIMARY KEY,
-    payload    JSONB          NOT NULL,
-    status     TEXT           NOT NULL DEFAULT 'pending',
-    created_at TIMESTAMPTZ    NOT NULL DEFAULT NOW()
+    id SERIAL PRIMARY KEY,
+    payload JSONB NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ```
 
-## Getting Started
+---
 
-**Prerequisites:** Go 1.21+, PostgreSQL 14+
-
-```bash
-git clone https://github.com/you/go-worker.git
-cd go-worker
-
-go mod tidy
-```
-
-Set your connection string in `main.go` (or via env variable — coming soon):
-
-```go
-dsn := "postgres://postgres:password@localhost:5432/go-worker"
-```
-
-Then run:
-
-```bash
-go run .
-```
-
-Insert a test job:
-
-```sql
-INSERT INTO jobs (payload) VALUES ('{"type": "email", "to": "user@example.com"}');
-```
-
-You should see:
-
-```
-Connected to Postgres successfully
-JOB LOCKED & PROCESSING: {"type": "email", "to": "user@example.com"}
-```
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 go-worker/
-├── main.go       # Worker loop — polls, locks, and processes jobs
-├── database.go   # pgxpool connection setup
-└── go.mod
+├── main.go        # entry point + worker pool
+├── database.go    # DB connection
+├── handlers.go    # HTTP API
+├── models.go      # payload structs
 ```
-
-## Roadmap
-
-- [x] **JSON payload parsing** — typed job structs with `encoding/json`
-- [x] **Job execution engine** — dispatch to handler functions based on job type
-- [x] **Multiple concurrent workers** — configurable worker pool via goroutines
-- [ ] **REST API layer** — HTTP endpoints to enqueue jobs and check status
-- [ ] **Retry logic** — exponential backoff for failed jobs
-- [ ] **Dead letter queue** — jobs that exceed max retries moved to `failed`
-- [ ] **Config via environment variables** — DSN, worker count, poll interval
-- [ ] **Graceful shutdown** — drain in-flight jobs on SIGTERM
-
-## Dependencies
-
-| Package | Purpose |
-|---|---|
-| [`pgx/v5`](https://github.com/jackc/pgx) | PostgreSQL driver and connection pool |
-
-## Why `FOR UPDATE SKIP LOCKED`?
-
-Standard `SELECT` + `UPDATE` leaves a gap where two workers can read the same row before either updates it. `FOR UPDATE SKIP LOCKED` solves this at the database level — any row already locked by another transaction is skipped entirely, making the operation safe without application-level coordination.
 
 ---
 
-*Feedbacks welcome.*
+## 🛣 Roadmap
+
+- Retry logic
+- Dead letter queue
+- Config via ENV
+- Graceful shutdown
+- Metrics / logging
+
+---
+
+## 💡 Why This Project Matters
+
+This is NOT a CRUD app.
+
+It demonstrates:
+
+- async processing
+- concurrency
+- system design
+- real-world backend patterns
+
+---
+
+Built for learning, extensibility, and performance.
+
