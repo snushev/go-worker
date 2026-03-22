@@ -99,9 +99,9 @@ go-worker/
 
 ## Roadmap
 
-- [ ] **JSON payload parsing** — typed job structs with `encoding/json`
-- [ ] **Job execution engine** — dispatch to handler functions based on job type
-- [ ] **Multiple concurrent workers** — configurable worker pool via goroutines
+- [x] **JSON payload parsing** — typed job structs with `encoding/json`
+- [x] **Job execution engine** — dispatch to handler functions based on job type
+- [x] **Multiple concurrent workers** — configurable worker pool via goroutines
 - [ ] **REST API layer** — HTTP endpoints to enqueue jobs and check status
 - [ ] **Retry logic** — exponential backoff for failed jobs
 - [ ] **Dead letter queue** — jobs that exceed max retries moved to `failed`
