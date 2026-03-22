@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -19,9 +20,23 @@ func main() {
 
 	pool := NewPostgresPool(dsn)
 
+	apiCfg := dbConfig{DB: pool}
+
 	var wg sync.WaitGroup
 
-	for i := range 4 {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("POST /job", apiCfg.HandlerJobCreate)
+	mux.HandleFunc("GET /jobs", apiCfg.HandlerJobsList)
+
+	go func() {
+		fmt.Println("Server is up on port :8080")
+		if err := http.ListenAndServe(":8080", mux); err != nil {
+			fmt.Printf("Server error: %v\n", err)
+		}
+	}()
+
+	for i := 0; i < 4; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -29,11 +44,12 @@ func main() {
 		}(i)
 	}
 	wg.Wait()
+
 }
 
-func worker(id int, cfg *pgxpool.Pool) {
+func worker(workerId int, cfg *pgxpool.Pool) {
 	ctx := context.Background()
-	fmt.Printf("Worker %d starting\n", id)
+	fmt.Printf("Worker %d starting\n", workerId)
 	for {
 		id, jsonData, err := fetchAndLockJob(ctx, cfg)
 		if err != nil {
@@ -46,7 +62,7 @@ func worker(id int, cfg *pgxpool.Pool) {
 			continue
 		}
 
-		fmt.Printf("JOB LOCKED: %s\n", jsonData)
+		fmt.Printf("[Worker %d] JOB LOCKED: %s\n", workerId, jsonData)
 
 		var payload JobPayload
 		err = json.Unmarshal(jsonData, &payload)
@@ -56,7 +72,7 @@ func worker(id int, cfg *pgxpool.Pool) {
 			continue
 		}
 
-		executeJob(payload)
+		executeJob(workerId, payload)
 
 		err = markDone(ctx, cfg, id)
 		if err != nil {
@@ -106,13 +122,13 @@ func fetchAndLockJob(ctx context.Context, db *pgxpool.Pool) (int, []byte, error)
 	return id, data, nil
 }
 
-func executeJob(p JobPayload) {
+func executeJob(id int, p JobPayload) {
 	switch p.Task {
 	case "print":
-		fmt.Printf("PRINT: %s\n", p.Value)
+		fmt.Printf("[Worker %d] PRINT: %s\n", id, p.Value)
 
 	case "sleep":
-		fmt.Printf("SLEEP: %d seconds\n", p.Seconds)
+		fmt.Printf("[Worker %d] SLEEP: %d seconds\n", id, p.Seconds)
 		time.Sleep(time.Duration(p.Seconds) * time.Second)
 
 	default:
